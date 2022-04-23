@@ -671,16 +671,7 @@ server:
           mountPath: /opt/gcp-secret-thanos   # path where you want to mount the sa
           readOnly: true
 
-  # sidecarTemplateValues - context to be used in template for sidecarContainers
-  # Example:
-  #   sidecarTemplateValues: *your-custom-globals
-  #   sidecarContainers:
-  #     webserver: |-
-  #       {{ include "webserver-container-template" . }}
-  # Template for `webserver-container-template` might looks like this:
-  #   image: "{{ .Values.server.sidecarTemplateValues.repository }}:{{ .Values.server.sidecarTemplateValues.tag }}"
-  #   ...
-  #
+  
   sidecarTemplateValues: {}
 
   ## Prometheus server container image
@@ -724,7 +715,9 @@ server:
   ##     secretKeyRef:
   ##       name: mysecret
   ##       key: username
-  env: []
+  env:
+    - name: SA_NAME
+      value: "SA_PATH_INSIDE_THE_CONTAINER"
 
   # List of flags to override default parameters, e.g:
   # - --enable-feature=agent
@@ -751,8 +744,9 @@ server:
   storagePath: ""
 
   global:
-    ## How frequently to scrape targets by default
-    ##
+    external_labels:
+      replica: server-${HOSTNAME}
+      cluster: CLUSTER_NAME
     scrape_interval: 1m
     ## How long until a scrape request times out
     ##
@@ -774,7 +768,10 @@ server:
 
   ## Additional Prometheus server container arguments
   ##
-  extraArgs: {}
+  extraArgs:
+    storage.tsdb.min-block-duration: 2h
+    storage.tsdb.max-block-duration: 2h
+    enable-feature: expand-external-labels
 
   ## Additional InitContainers to initialize the pod
   ##
@@ -786,7 +783,10 @@ server:
 
   ## Additional Prometheus server Volumes
   ##
-  extraVolumes: []
+  extraVolumes:
+    - name: prometheus-config-shared
+      emptyDir: {}
+    - name: prometheus-rules
 
   ## Additional Prometheus server hostPath mounts
   ##
