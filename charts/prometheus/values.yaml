@@ -630,29 +630,46 @@ server:
   ##
   enabled: true
 
-  ## Use a ClusterRole (and ClusterRoleBinding)
-  ## - If set to false - we define a RoleBinding in the defined namespaces ONLY
-  ##
-  ## NB: because we need a Role with nonResourceURL's ("/metrics") - you must get someone with Cluster-admin privileges to define this role for you, before running with this setting enabled.
-  ##     This makes prometheus work - for users who do not have ClusterAdmin privs, but wants prometheus to operate on their own namespaces, instead of clusterwide.
-  ##
-  ## You MUST also set namespaces to the ones you have access to and want monitored by Prometheus.
-  ##
-  # useExistingClusterRoleName: nameofclusterrole
-
-  ## namespaces to monitor (instead of monitoring all - clusterwide). Needed if you want to run without Cluster-admin privileges.
-  # namespaces:
-  #   - yournamespace
-
   name: server
 
-  # sidecarContainers - add more containers to prometheus server
-  # Key/Value where Key is the sidecar `- name: <Key>`
-  # Example:
-  #   sidecarContainers:
-  #      webserver:
-  #        image: nginx
-  sidecarContainers: {}
+  sidecarContainers:
+    - name: thanos
+      image: quay.io/thanos/thanos:v0.16.0
+      args:
+        - "sidecar"
+        - "--log.level=debug"
+        - "--tsdb.path=/data-thanos"
+        - "--prometheus.url=http://127.0.0.1:9090"
+        - "--objstore.config={type: GCS, config: {bucket: BUCKET_NAME}}"
+        - "--reloader.config-envsubst-file=/etc/config-thanos/prometheus.yaml"
+      env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name : SA_NAME
+          value: SA_PATH_INSIDE_THE_CONTAINER
+      ports:
+        - name: http-sidecar
+          containerPort: 10902
+        - name: grpc
+          containerPort: 10901
+      livenessProbe:
+          httpGet:
+            port: 10902
+            path: /-/healthy
+      readinessProbe:
+        httpGet:
+          port: 10902
+          path: /-/ready
+      volumeMounts:
+        - name: storage-volume
+          mountPath: /data-thanos
+        - name: config-volume
+          mountPath: /etc/config-thanos
+        - name: SA_NAME
+          mountPath: /opt/gcp-secret-thanos   # path where you want to mount the sa
+          readOnly: true
 
   # sidecarTemplateValues - context to be used in template for sidecarContainers
   # Example:
